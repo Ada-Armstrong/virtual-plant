@@ -1,4 +1,7 @@
+from .utils import ValueRange
+
 from abc import ABC
+import dataclasses
 
 # light level is in the range 0 - 255
 MIN_LIGHT_AMT = 0
@@ -25,8 +28,9 @@ class PlantComponent(ABC):
         self.water_absorbtion: int = water_absorbtion
 
         self.light_absorbtion: int = light_absorbtion
-        self.low_light_threshold: int = max(MIN_LIGHT_AMT, LOW_LIGHT_AMT - light_absorbtion)
-        self.high_light_threshold: int = min(MAX_LIGHT_AMT, HIGH_LIGHT_AMT - light_absorbtion)
+        self.light_range = ValueRange(max(MIN_LIGHT_AMT, LOW_LIGHT_AMT - light_absorbtion),
+                                      min(MAX_LIGHT_AMT, HIGH_LIGHT_AMT - light_absorbtion))
+
 
     def alive(self) -> bool:
         """
@@ -47,7 +51,7 @@ class PlantComponent(ABC):
         """
         light_level = self.env.light_level()
 
-        if self.low_light_threshold > light_level or self.high_light_threshold < light_level:
+        if light_level not in self.light_range:
             self.take_damage(1)
             return True
         return False
