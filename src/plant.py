@@ -1,84 +1,179 @@
 from abc import ABC
 
+# light level is in the range 0 - 255
+MIN_LIGHT_AMT = 0
+LOW_LIGHT_AMT = 50
+HIGH_LIGHT_AMT = 200
+MAX_LIGHT_AMT = 255
 
 class PlantComponent(ABC):
     """
     Represents a part of the plant, for example a stem or leaf.
     """
-    age: int
-    size: int
-    growth_factor: int
+    MAX_HEALTH: int = 100
+    MAX_SIZE: int = 50
 
-    def __init__(self, growth_factor):
-        self.age = 0
-        self.size = 1
-        self.growth_factor = growth_factor
+    def __init__(self, environment, growth_factor, water_absorbtion, light_absorbtion):
+        self.sugar: int = 0
+        self.water: int = 0
+        self.age: int = 0
+        self.size: int = 1
+        self.env = environment
+        self.health: int = self.MAX_HEALTH
+        self.growth_factor: int = growth_factor
 
-    def sun_exposure(self):
-        raise NotImplementedError()
+        self.water_absorbtion: int = water_absorbtion
+
+        self.light_absorbtion: int = light_absorbtion
+        self.low_light_threshold: int = max(MIN_LIGHT_AMT, LOW_LIGHT_AMT - light_absorbtion)
+        self.high_light_threshold: int = min(MAX_LIGHT_AMT, HIGH_LIGHT_AMT - light_absorbtion)
+
+    def alive(self) -> bool:
+        """
+        Return whether the plant is alive.
+        """
+        return self.health > 0
+
+    def take_damage(self, dmg: int = 1):
+        """
+        Apply damage to the component.
+        """
+        self.health -= dmg
+
+    def sun_damage(self) -> bool:
+        """
+        Return whether the component should take damage due to over or under exposure to sun.
+        Apply the damage as well.
+        """
+        light_level = self.env.light_level()
+
+        if self.low_light_threshold > light_level or self.high_light_threshold < light_level:
+            self.take_damage(1)
+            return True
+        return False
+
+    def water_damage(self):
+        """
+        Return whether the component should take damage due to over or under exposure to water.
+        Apply the damage as well.
+        """
+        if (self.env.dry() and self.dry()) or (self.env.soaked and self.soaked()):
+            self.take_damage(1)
+            return True
+        return False
+
+    def stress(self):
+        """
+        Apply environmental stress to the plant.
+        """
+        self.sun_damage()
+        self.water_damage()
+
+    def sun_exposure(self) -> int:
+        """
+        Return the amount of sun the component is exposed to.
+        """
+        light_level = self.env.light_level()
+        exposure = min(self.light_absorbtion, light_level)
+
+        return exposure
 
     def get_water(self):
+        """
+        Extract water from the environment. Take damage if too dry or too hydrated.
+        """
+        water = self.env.get_water(self.water_absorbtion)
+        self.water += water
+
+        return self.water
+
+    def heal(self):
+        """
+        Consume sugar to heal.
+        """
+        while self.health < self.MAX_HEALTH and self.sugar > 0:
+            self.sugar -= 1
+            self.health += 1
+
+    def grow(self):
+        """
+        Consume sugar to grow.
+        """
+        if self.size < self.MAX_SIZE:
+            self.size += self.sugar * self.growth_factor
+            self.sugar -= 1
+
+    def feed(self):
+        """
+        Consume sugar to heal and grow.
+        """
+        self.heal()
+        self.grow()
+
+    def dry(self) -> bool:
+        """
+        Return True if the component is considered dry, generally low on water.
+        """
         raise NotImplementedError()
 
-    def grow(self, sugar_amount: int):
-        self.size += sugar_amount*self.growth_factor
+    def soaked(self) -> bool:
+        """
+        Return True if the component is considered soaked, generally too much water.
+        """
+        raise NotImplementedError()
+
+    def photosynthesize(self):
+        """
+        Produces sugar in the component by converting water and light.
+        """
+        if self.water > 0 and self.sun_exposure():
+            self.water -= 1
+            self.sugar += 1
 
 class Seed(PlantComponent):
     """
     It's a sneed.
     """
-    def __init__(self):
+    def __init__(self, environment):
         seed_growth_factor = 5
-        super().__init__(seed_growth_factor)
+        water_absorbtion = 5
+        light_absorbtion = 5
+        super().__init__(environment, seed_growth_factor, water_absorbtion, light_absorbtion)
 
-    def sun_exposure(self):
-        return 3
+    def dry(self) -> bool:
+        return self.water < 1
 
-    def get_water(self):
-        return 3
+    def soaked(self) -> bool:
+        return self.water > 100
 
 class PlantModel(ABC):
     """
     An abstract base class that represents the interface for a plant.
     """
-    sugar: int
-    water: int
     age: int
     components: list[PlantComponent]
 
     def __init__(self):
-        self.sugar = 0
-        self.water = 0
         self.age = 0
         self.components = []
 
-    def add_water(self, amount: int):
-        self.water += amount
-
-    def get_water(self):
+    def get_water(self) -> int:
+        """
+        Return the total amount of water stored in the plant.
+        """
+        water = 0
         for component in self.components:
-            self.add_water(component.get_water())
+            water += component.get_water()
+        return water
 
-    def sun_exposure(self):
+    def sun_exposure(self) -> int:
+        """
+        Return the total amount of sun exposure.
+        """
         exposure = 0
         for component in self.components:
             exposure += component.sun_exposure()
         return exposure
-
-    def photosynthesize(self):
-        sunlight_threshold: int = 5
-        sunlight_burn_threshold: int = 10
-        water_threshold: int = 5
-
-        sunlight = self.sun_exposure()
-        burnt = sunlight > sunlight_threshold
-
-        if burnt:
-            water_threshold *= 2
-
-        if sunlight > sunlight_threshold and self.water > water_threshold:
-            self.sugar += 5
-            self.water -= water_threshold
 
     def grow(self):
         sugar_per_component = self.sugar / len(self.components)
